@@ -1,297 +1,43 @@
-<!doctype html>
-<html lang="zh-CN">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>小恐龙 高仿游戏（单文件）</title>
+  <meta charset="UTF-8">
+  <title>My Chat App</title>
   <style>
-    /* 轻量化复古风，所有样式内联方便直接跑 */
-    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;background:#f7f7f7}
-    #gameWrap{display:flex;align-items:center;justify-content:center;height:100%;}
-    canvas{background:linear-gradient(#fff,#e9eef6);border:6px solid #555;border-radius:8px;box-shadow:0 12px 30px rgba(20,30,50,0.25)}
-    .ui{position:fixed;top:16px;left:16px;font-size:13px;color:#333}
-    .hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font-size:13px;color:#555}
-    .controls{position:fixed;top:16px;right:16px;text-align:right}
-    button{padding:6px 10px;border-radius:6px;border:1px solid #bbb;background:white;cursor:pointer}
-    a{color:#0366d6}
+    body { font-family: Arial; }
+    #chat { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; }
+    #message { width: 80%; }
   </style>
 </head>
 <body>
-  <div id="gameWrap">
-    <canvas id="game" width="900" height="210" aria-label="小恐龙高仿游戏"></canvas>
-  </div>
-  <div class="ui">
-    <strong>分数:</strong> <span id="score">0</span>
-  </div>
-  <div class="controls">
-    <button id="restart">重新开始</button>
-  </div>
-  <div class="hint">按 空格 或 ↑ 跳跃， 按 ↓ 蹲下（长按）; 可放到 GitHub Pages 运行</div>
 
-<script>
-/*
-  单文件高仿恐龙游戏（来自用户需求：可直接上传 GitHub 运行）
-  说明：这是原创实现，使用 canvas 绘制，避免任何受版权保护资源。
-  特性：键盘/触摸控制、得分、速度随得分增长、障碍与云层、夜间切换、平滑动画
-*/
-(() => {
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width; const H = canvas.height;
-  const scoreEl = document.getElementById('score');
-  const restartBtn = document.getElementById('restart');
+  <h2>Web Chat</h2>
 
-  // game state
-  let running = false;
-  let gameOver = false;
-  let lastTime = 0;
-  let speed = 6; // base
-  let distance = 0;
-  let score = 0;
-  let highScore = 0;
-  let spawnTimer = 0;
-  let cloudTimer = 0;
-  let night = false;
+  <input id="name" placeholder="输入你的昵称">
+  <button onclick="setName()">确定</button>
 
-  // input
-  const input = {jump:false,down:false,touched:false};
-  window.addEventListener('keydown', e=>{
-    if(e.code==='Space' || e.code==='ArrowUp') input.jump = true;
-    if(e.code==='ArrowDown') input.down = true;
-    if(e.code==='KeyR' && gameOver) start();
-  });
-  window.addEventListener('keyup', e=>{
-    if(e.code==='Space' || e.code==='ArrowUp') input.jump = false;
-    if(e.code==='ArrowDown') input.down = false;
-  });
-  // touch
-  canvas.addEventListener('touchstart', e=>{ e.preventDefault(); input.jump=true; input.touched=true; });
-  canvas.addEventListener('touchend', e=>{ e.preventDefault(); input.touched=false; });
+  <div id="chat"></div>
 
-  // Dino
-  const dino = {
-    x: 55, y: H - 48, w: 44, h: 44,
-    vy:0, grounded:true, duck:false,
-    frame:0, frameTick:0
-  };
+  <input id="message" placeholder="输入消息…">
+  <button onclick="send()">发送</button>
 
-  // Obstacles & clouds
-  const obstacles = [];
-  const clouds = [];
+  <script>
+    let username = "游客";
 
-  // random util
-  const rand = (a,b) => Math.random()*(b-a)+a;
-
-  function start(){
-    running = true; gameOver=false; lastTime=0; speed=6; distance=0; score=0; spawnTimer=0; cloudTimer=0; obstacles.length=0; clouds.length=0; dino.y=H-48; dino.vy=0; dino.grounded=true; night=false; highScore = Math.max(highScore, score);
-  }
-
-  restartBtn.addEventListener('click', ()=>start());
-
-  // obstacle factory
-  function spawnObstacle(){
-    const type = Math.random() < 0.6 ? 'cactus' : 'ptero';
-    if(type==='cactus'){
-      const h = Math.round(rand(20,40));
-      obstacles.push({type:'cactus',x:W+20,y:H-20-h,w:20,h:h});
-    } else {
-      const flyY = rand(H-120, H-80);
-      obstacles.push({type:'ptero',x:W+20,y:flyY,w:46,h:30,vy:0,wing:0,wingTick:0});
-    }
-  }
-
-  function spawnCloud(){
-    clouds.push({x:W+20,y:rand(20,90),w:rand(38,90),speed:rand(0.8,1.8)});
-  }
-
-  // physics
-  const gravity = 0.9;
-  const jumpPower = -14;
-
-  function update(dt){
-    if(gameOver) return;
-    // increase difficulty
-    distance += speed*dt/16;
-    score = Math.floor(distance);
-    scoreEl.textContent = score;
-    if(score % 200 === 0 && score>0) night = !night; // toggle day/night every 200 points
-
-    // speed scales slowly
-    speed = 6 + Math.min(12, score/150);
-
-    // dino input
-    if((input.jump || input.touched) && dino.grounded){ dino.vy = jumpPower; dino.grounded=false; }
-    dino.vy += gravity * (dt/16);
-    dino.y += dino.vy * (dt/16);
-    // ground collision
-    const groundY = H - 20 - dino.h;
-    if(dino.y >= groundY){ dino.y = groundY; dino.vy = 0; dino.grounded = true; }
-
-    // ducking
-    dino.duck = input.down && !dino.grounded;
-    dino.h = dino.duck ? 30 : 44;
-
-    // obstacles movement
-    for(let i=obstacles.length-1;i>=0;i--){
-      const ob = obstacles[i];
-      ob.x -= speed * (dt/16);
-      if(ob.type==='ptero'){ ob.wingTick += dt; ob.wing = Math.sin(ob.wingTick/120)*8; }
-      // collision box check
-      const dbox = {x:dino.x+8,y:dino.y+ (dino.duck?12:2),w:dino.w-16,h:dino.h-8};
-      const obox = {x:ob.x,y:ob.y,w:ob.w,h:ob.h};
-      if(rectOverlap(dbox,obox)) { gameOver = true; running=false; }
-      if(ob.x + ob.w < -40) obstacles.splice(i,1);
+    function setName(){
+      username = document.getElementById("name").value || "游客";
     }
 
-    // cloud movement
-    for(let i=clouds.length-1;i>=0;i--){ clouds[i].x -= clouds[i].speed * (dt/16); if(clouds[i].x + clouds[i].w < -50) clouds.splice(i,1); }
+    function send(){
+      const text = document.getElementById("message").value;
+      const chat = document.getElementById("chat");
+      const time = new Date().toLocaleTimeString();
 
-    // spawn logic
-    spawnTimer -= dt;
-    if(spawnTimer <= 0){ spawnObstacle(); spawnTimer = rand(700 - Math.min(400, score*2), 1400 - Math.min(700, score*4)); }
-    cloudTimer -= dt;
-    if(cloudTimer <= 0){ spawnCloud(); cloudTimer = rand(1500,4000); }
-
-    // game over fallback if dinosaur falls off bottom
-    if(dino.y > H+200) { gameOver = true; running=false; }
-
-    // track highscore
-    if(score > highScore) highScore = score;
-  }
-
-  function rectOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
-
-  function drawGround(){
-    // parallax ground line
-    ctx.fillStyle = night ? '#222' : '#6b6b6b';
-    const groundH = 20;
-    ctx.fillRect(0,H-groundH,W,groundH);
-    // dashed ground texture
-    ctx.strokeStyle = night ? '#111' : '#9aa0a6';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for(let x = -((distance*0.6)%40); x < W; x+=20){ ctx.moveTo(x,H-groundH+6); ctx.lineTo(x+10,H-groundH+6); }
-    ctx.stroke();
-  }
-
-  function drawDino(){
-    ctx.save();
-    // body
-    ctx.fillStyle = night ? '#fff' : '#111';
-    const dx = dino.x, dy = dino.y, dw = dino.w, dh = dino.h;
-    // simple pixel-ish dino made with rects & rounded
-    roundRect(ctx,dx,dy,dw,dh,6,true,false);
-    // eye
-    ctx.fillStyle = night ? '#000' : '#fff';
-    ctx.fillRect(dx + dw - 18, dy + 10, 6, 6);
-    // leg animation
-    const legY = dy + dh - 6;
-    const t = Date.now()/120;
-    if(!dino.grounded){ // mid-air
-      ctx.fillRect(dx+6, legY-6, 8, 6);
-      ctx.fillRect(dx+dw-14, legY-6, 8, 6);
-    } else {
-      const s = Math.sin(t) > 0 ? 1 : -1;
-      ctx.fillRect(dx+6, legY + 2*s, 8, 6);
-      ctx.fillRect(dx+dw-14, legY - 2*s, 8, 6);
+      chat.innerHTML += `<p>[${time}] <b>${username}</b>: ${text}</p>`;
+      document.getElementById("message").value = "";
+      chat.scrollTop = chat.scrollHeight;
     }
-    ctx.restore();
-  }
+  </script>
 
-  function drawObstacles(){
-    for(const ob of obstacles){
-      if(ob.type==='cactus'){
-        drawCactus(ob.x, ob.y, ob.w, ob.h);
-      } else if(ob.type==='ptero'){
-        drawPtero(ob.x, ob.y + ob.wing, ob.w, ob.h, ob.wing);
-      }
-    }
-  }
-
-  function drawCactus(x,y,w,h){
-    ctx.save(); ctx.translate(x,y);
-    ctx.fillStyle = night ? '#e6e6e6' : '#0b7a0b';
-    roundRect(ctx,0,0,w,h,4,true,false);
-    // arms
-    ctx.fillRect(-6, h/3, 6, 4);
-    ctx.fillRect(w, h/2, 6, 4);
-    ctx.restore();
-  }
-
-  function drawPtero(x,y,w,h,wing){
-    ctx.save(); ctx.translate(x,y);
-    ctx.fillStyle = night ? '#ddd' : '#663300';
-    // body
-    roundRect(ctx,0,4,w*0.7,h-6,6,true,false);
-    // wings
-    ctx.beginPath(); ctx.moveTo(w*0.7,8); ctx.lineTo(w + wing, h/2); ctx.lineTo(w*0.7, h-2); ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
-
-  function drawClouds(){
-    ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = night ? '#ddd' : '#fff';
-    for(const c of clouds){
-      roundRect(ctx, c.x, c.y, c.w, 20, 12, true, false);
-      roundRect(ctx, c.x+10, c.y-6, c.w*0.6, 18, 12, true, false);
-    }
-    ctx.restore();
-  }
-
-  function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(typeof r==='undefined') r=5; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
-
-  function drawSky(){
-    const g = ctx.createLinearGradient(0,0,0,H);
-    if(night){ g.addColorStop(0,'#041529'); g.addColorStop(1,'#081827'); }
-    else { g.addColorStop(0,'#fdfdfc'); g.addColorStop(1,'#e9eef6'); }
-    ctx.fillStyle = g; ctx.fillRect(0,0,W,H-20);
-    // sun/moon
-    ctx.save();
-    if(night){ ctx.fillStyle='#f6f6f6'; ctx.beginPath(); ctx.arc(W-90,40,14,0,Math.PI*2); ctx.fill(); }
-    else { ctx.fillStyle='#ffd66b'; ctx.beginPath(); ctx.arc(W-90,40,16,0,Math.PI*2); ctx.fill(); }
-    ctx.restore();
-  }
-
-  function drawScore(){
-    ctx.save(); ctx.font='12px monospace'; ctx.textAlign='right'; ctx.fillStyle = night ? '#eee' : '#222';
-    ctx.fillText('SCORE ' + score, W - 16, 16);
-    ctx.fillText('HI ' + highScore, W - 16, 34);
-    ctx.restore();
-  }
-
-  function draw(){
-    // clear
-    ctx.clearRect(0,0,W,H);
-    drawSky();
-    drawClouds();
-    drawGround();
-    drawDino();
-    drawObstacles();
-    drawScore();
-
-    if(gameOver){
-      ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(W/2-140,H/2-36,280,72);
-      ctx.fillStyle='#fff'; ctx.font='18px sans-serif'; ctx.textAlign='center'; ctx.fillText('游戏结束 — 按 R 或 点击重新开始', W/2, H/2);
-      ctx.restore();
-    }
-  }
-
-  function loop(ts){
-    if(!lastTime) lastTime = ts; const dt = Math.min(40, ts - lastTime); lastTime = ts;
-    if(running) update(dt);
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  // start animation
-  start();
-  requestAnimationFrame(loop);
-
-  // utility: save to localStorage on unload
-  window.addEventListener('beforeunload', ()=>{ try{ localStorage.setItem('dino_high', String(highScore)); }catch(e){} });
-  // load high
-  try{ const s = localStorage.getItem('dino_high'); if(s) highScore = Number(s); }catch(e){}
-
-})();
-</script>
 </body>
 </html>
